@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snake Game</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background: linear-gradient(to bottom, #2c3e50, #3498db);
+      color: #ecf0f1;
+      font-family: 'Helvetica Neue', sans-serif;
+    }
+
+    h1, p {
+      text-align: center;
+      font-weight: 300;
+    }
+
+    canvas {
+      margin-top: 20px;
+      border: 10px solid #3498db;
+      background: linear-gradient(to bottom, #2980b9, #92a8be);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+      border-radius: 10px;
+    }
+
+    footer {
+      margin-top: 20px;
+      text-align: center;
+      color: #bdc3c7;
+      font-size: 14px;
+    }
+
+    #scoreDialog {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px;
+      background: #fff;
+      border: 2px solid #3498db;
+      border-radius: 10px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+      z-index: 9999;
+      text-align: center;
+    }
+
+    #scoreDialog h2 {
+      margin-bottom: 10px;
+    }
+
+    #highScore {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 18px;
+      color: #3498db;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snake Game</h1>
+  <p>Use arrow keys to control the snake</p>
+  <canvas id="snakeCanvas" width="400" height="400"></canvas>
+  <div id="highScore" >High Score: <span id="displayHighScore">0</span></div>
+  <footer style="color: black;font-size: large;" bold >EPSILON - PI VBIT</footer>
+
+  <div id="scoreDialog">
+    <h2 style="color: black;">Your Score</h2>
+    <p id="scoreValue" style="color: black;"></p>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const canvas = document.getElementById('snakeCanvas');
+      const ctx = canvas.getContext('2d');
+
+      const gridSize = 20;
+      let snake = [{ x: 100, y: 100 }];
+      let direction = 'right';
+      let food = generateFood();
+      let score = 0;
+      let highScore = 0;
+      let bigFood = null;
+      let snakeSpeed = 100; // Initial speed in milliseconds
+      let gameInterval;
+
+      function generateFood() {
+        const x = Math.floor(Math.random() * (canvas.width / gridSize)) * gridSize;
+        const y = Math.floor(Math.random() * (canvas.height / gridSize)) * gridSize;
+        return { x, y };
+      }
+
+      function generateBigFood() {
+        const x = Math.floor(Math.random() * (canvas.width / gridSize)) * gridSize;
+        const y = Math.floor(Math.random() * (canvas.height / gridSize)) * gridSize;
+        return { x, y, isBig: true };
+      }
+
+      function drawFood(food) {
+        const radius = gridSize / 2;
+        ctx.fillStyle = food.isBig ? '#e74c3c' : '#e67e22';
+        ctx.beginPath();
+        ctx.arc(food.x + radius, food.y + radius, radius, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      function draw() {
+        const radius = gridSize / 2;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        drawFood(food);
+
+        if (bigFood) {
+          drawFood(bigFood);
+        }
+
+        snake.forEach((segment, index) => {
+          ctx.fillStyle = '#008000';
+
+          // Differentiate the head with eyebrows
+          if (index === 0) {
+            ctx.beginPath();
+            ctx.arc(segment.x + radius, segment.y + radius, radius, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Draw eyebrows on the head
+            ctx.beginPath();
+            ctx.moveTo(segment.x + 5, segment.y + 5);
+            ctx.lineTo(segment.x + 15, segment.y + 5);
+            ctx.moveTo(segment.x + 5, segment.y + 5);
+            ctx.lineTo(segment.x + 5, segment.y + 15);
+            ctx.stroke();
+          } else {
+            // Draw the body segments
+            ctx.beginPath();
+            ctx.arc(segment.x + radius, segment.y + radius, radius, 0, 2 * Math.PI);
+            ctx.fill();
+          }
+        });
+      }
+
+      function move() {
+        let head = { ...snake[0] };
+
+        switch (direction) {
+          case 'up':
+            head.y -= gridSize;
+            break;
+          case 'down':
+            head.y += gridSize;
+            break;
+          case 'left':
+            head.x -= gridSize;
+            break;
+          case 'right':
+            head.x += gridSize;
+            break;
+        }
+
+        // Check if the snake hits itself
+        if (checkCollision(head, snake.slice(1))) {
+          gameOver();
+          return;
+        }
+
+        snake.unshift(head);
+
+        // Check for collision with big food
+        if (bigFood && head.x === bigFood.x && head.y === bigFood.y) {
+          score += 20;
+          bigFood = null;
+        } else {
+          // Check for collision with regular food
+          if (head.x === food.x && head.y === food.y) {
+            score += 10;
+
+            // Display big food every 5 foods eaten
+            if (score % 50 === 0) {
+              bigFood = generateBigFood();
+            }
+
+            food = generateFood();
+
+            // Increase snake speed
+            snakeSpeed -= 5;
+          } else {
+            // Remove the last segment to keep the snake length constant
+            snake.pop();
+          }
+        }
+
+        // Update high score
+        if (score > highScore) {
+          highScore = score;
+          updateHighScore();
+        }
+
+        // Check for collision with the canvas borders
+        if (
+          head.x < 0 || head.x >= canvas.width ||
+          head.y < 0 || head.y >= canvas.height
+        ) {
+          gameOver();
+        }
+      }
+
+      function checkCollision(point, array) {
+        // Check if the point collides with any element in the array
+        return array.some(segment => segment.x === point.x && segment.y === point.y);
+      }
+
+      function updateHighScore() {
+        const displayHighScore = document.getElementById('displayHighScore');
+        displayHighScore.textContent = highScore;
+      }
+
+      function changeDirection(event) {
+        const key = event.key;
+
+        switch (key) {
+          case 'ArrowUp':
+            if (direction !== 'down') {
+              direction = 'up';
+            }
+            break;
+          case 'ArrowDown':
+            if (direction !== 'up') {
+              direction = 'down';
+            }
+            break;
+          case 'ArrowLeft':
+            if (direction !== 'right') {
+              direction = 'left';
+            }
+            break;
+          case 'ArrowRight':
+            if (direction !== 'left') {
+              direction = 'right';
+            }
+            break;
+        }
+      }
+
+      function gameOver() {
+        clearInterval(gameInterval);
+        showScoreDialog();
+      }
+
+      function showScoreDialog() {
+        const scoreDialog = document.getElementById('scoreDialog');
+        const scoreValue = document.getElementById('scoreValue');
+
+        scoreValue.textContent = `Your Score: ${score}`;
+        scoreDialog.style.display = 'block';
+
+        // Automatically restart the game after 3 seconds
+        setTimeout(() => {
+          resetGame();
+          closeDialog();
+        }, 3000);
+      }
+
+      function resetGame() {
+        // Reset the game
+        snake = [{ x: 100, y: 100 }];
+        direction = 'right';
+        food = generateFood();
+        score = 0;
+        bigFood = null;
+        snakeSpeed = 100; // Reset speed to initial value
+        gameInterval = setInterval(gameLoop, snakeSpeed);
+      }
+
+      function closeDialog() {
+        const scoreDialog = document.getElementById('scoreDialog');
+        scoreDialog.style.display = 'none';
+      }
+
+      function gameLoop() {
+        move();
+        draw();
+      }
+
+      document.addEventListener('keydown', changeDirection);
+
+      gameInterval = setInterval(gameLoop, snakeSpeed);
+    });
+  </script>
+</body>
+</html>
